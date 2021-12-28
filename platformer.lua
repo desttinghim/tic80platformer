@@ -16,7 +16,25 @@ end
 -- Animation
 F = enum{"INDEX","WAIT","STOP","LOOP"}
 Anim = {
- still = function (i)
+ new = function(anim)
+  local t = setmetatable({},{__index = Anim})
+
+  t.anim = anim
+  t.index = 1
+  t.next = 0
+  t.frame = 1
+  return t
+ end,
+
+ play = function(self, i)
+  if self.index ~= i then
+   self.index = i
+   self.next = 0
+   self.frame = 1
+  end
+ end,
+
+ still = function(i)
   return {
    {t=F.INDEX,v=i},
    {t=F.STOP}
@@ -31,13 +49,12 @@ Anim = {
   end
   a[#a+1]={t=F.LOOP}
   return a
- end
-} -- End Anim
+ end,
+} -- Anim
 
 -- Actor
 Actor = {
  new = function(tbl)
-  tbl = setmetatable(tbl, {__index=Actor})
   tbl.index = tbl.index or 255
   tbl.x = tbl.x or 0
   tbl.y = tbl.y or 0
@@ -45,92 +62,158 @@ Actor = {
   tbl.h = tbl.h or 1
   tbl.scale = tbl.scale or 1
   tbl.rot = tbl.rot or 0
-  tbl.anim = tbl.anim
-  -- Internal state for anim
-  tbl.next = 0
-  tbl.frame = 1
   return tbl
  end,
- 
- set_anim = function(self, a)
-  if self.anim ~= a then
-   self.anim = a
-   self.next = 0
-   self.frame = 1
-  end
- end,
-} -- End Actor
+} -- Actor
 
--- Anim Lookup
-anim={
- Anim.still(256),
- Anim.simple(7,{257,258,259,260}),
- Anim.still(261),
- Anim.still(262),
+Control={
+ -- Valid `controller` values:
+ --  0,1,2,3 = players 1-4
+ --  4+ = AI
+ new = function(tbl)
+  tbl.controller = tbl.controller
+  tbl.left = false
+  tbl.right = false
+  tbl.up = false
+  tbl.down = false
+  tbl.anim = tbl.anim or {}
+  return tbl
+ end
+}
+
+Physics={
+ new = function(tbl)
+  tbl.gravity = tbl.gravity or 1
+  tbl.hspeed = tbl.hspeed or 0
+  tbl.vspeed = tbl.vspeed or 0
+  return tbl
+ end
+}
+
+Comp = {
+ count=0,
+
+ actor={},
+ control={},
+ anim={},
+ physics={},
+
+ add = function(self, ent)
+  self.count = self.count + 1
+  local count = self.count
+  if ent.actor then self.actor[count] = ent.actor end
+  if ent.control then self.control[count] = ent.control end
+  if ent.anim then self.anim[count] = ent.anim end
+  if ent.physics then self.physics[count] = ent.physics end
+  return count
+ end,
 }
 
 t=0
-ecount=1
-actor={
- Actor.new({index=256,x=0,y=0,anim=1})
-}
-controllable={[1]=true}
-animation={
- {anim=1,next=0,frame=1},
-}
+
+function init()
+ local player = Comp:add({
+  actor = Actor.new({index=256,x=0,y=0}),
+  anim = Anim.new({
+   Anim.still(256),
+   Anim.simple(7,{257,258,259,260}),
+   Anim.still(261),
+   Anim.still(262),
+  }),
+  control = Control.new({
+    controller=0,
+    anim={still=1,walk=2,jump=3,fall=4},
+  }),
+  physics = Physics.new({}),
+ })
+end
+
+init()
 
 function TIC()
- input()
- draw()
+ Sys.run()
  t=t+1
 end
 
-function input()
- for i,v in pairs(controllable) do
-  if v then
-   local a = actor[i]
-   if btn(0) then
-    a.y=a.y-1 a:set_anim(2)
-   elseif btn(1) then
-    a.y=a.y+1 a:set_anim(2)
-   elseif btn(2) then
-    a.x=a.x-1 a:set_anim(2) a.flip=1
-   elseif btn(3) then
-    a.x=a.x+1 a:set_anim(2) a.flip=0
-   else 
-    a:set_anim(1) 
+Sys = {
+ run = function()
+  for i,control in pairs(Comp.control) do
+   if control.controller == 0 then Sys.input(control) end
+  end
+
+  for i,act in ipairs(Comp.actor) do
+   if Comp.physics[i] then
+    Sys.physics(act, Comp.physics[i], Comp.control[i])
+   end
+   if Comp.anim[i] then
+    Sys.animate(act, Comp.anim[i], Comp.control[i])
    end
   end
- end
-end
 
-function draw()
- cls(13)
- map(0,0,30,17)
- print("HELLO LOUIS!",84,84)
+  Sys.draw(Comp.actor)
+ end,
 
- for i,act in ipairs(actor) do
-  while act.anim ~= nil and act.next <= t do
-   local a = anim[act.anim]
-   local f = a[act.frame]
+ input = function(control)
+  control.up = btn(0)
+  control.down = btn(1)
+  control.left = btn(2)
+  control.right = btn(3)
+ end,
+
+ physics = function(actor,physics,control)
+  if control then
+   local hspeed = 0
+   if control.left then hspeed = hspeed - 1 end
+   if control.right then hspeed = hspeed + 1 end
+   physics.hspeed = hspeed
+   -- if control.up then physics.vspeed = -1 end
+  end
+  actor.x = actor.x + physics.hspeed
+  actor.y = actor.y + physics.vspeed
+ end,
+
+ animate = function(actor,anim,control)
+  if control then
+   if control.left then
+    actor.flip=1
+    if control.anim.walk then anim:play(control.anim.walk) end
+   elseif control.right then
+    actor.flip=0
+    if control.anim.walk then anim:play(control.anim.walk) end
+   else
+    if control.anim.still then anim:play(control.anim.still) end
+   end
+  end
+  while anim.index ~= nil and anim.next <= t do
+   local a = anim.anim[anim.index]
+   local f = a[anim.frame]
    if f.t == F.STOP then
-    act.anim = nil
+    anim.index = nil
     break
    elseif f.t == F.INDEX then
-    act.index = f.v
+    actor.index = f.v
    elseif f.t == F.LOOP then
-    act.frame = 0
+    anim.frame = 0
    elseif f.t == F.WAIT then
-    act.next = t + f.v
+    anim.next = t + f.v
    end
-   act.frame = act.frame + 1
+   anim.frame = anim.frame + 1
   end
-  local transparent = 0
-  spr(act.index,act.x,act.y,transparent,
-  act.scale,act.flip,act.rot,
-  act.w,act.h)
- end
-end
+ end,
+
+ draw = function(actor)
+  cls(13)
+  map(0,0,30,17)
+  print("HELLO LOUIS!",84,84)
+  for i,act in ipairs(actor) do
+   local transparent = 0
+   spr(act.index,act.x,act.y,transparent,
+   act.scale,act.flip,act.rot,
+   act.w,act.h)
+  end
+ end,
+}
+
 -- <TILES>
 -- 018:00000000000000000000000000000000000c0000000000000cc00c0ccccccccc
 -- 020:0cccccccccc0000cc0000c00c0000000c0000000cc0c0000cc000000c0000000
