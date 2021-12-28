@@ -54,9 +54,9 @@ Actor = {
  
  set_anim = function(self, a)
   if self.anim ~= a then
-	  self.anim = a
-	  self.next = 0
-	  self.frame = 1
+   self.anim = a
+   self.next = 0
+   self.frame = 1
   end
  end,
 } -- End Actor
@@ -64,7 +64,7 @@ Actor = {
 -- Anim Lookup
 anim={
  Anim.still(256),
- Anim.simple(15,{257,258,259,260}),
+ Anim.simple(7,{257,258,259,260}),
  Anim.still(261),
  Anim.still(262),
 }
@@ -81,54 +81,54 @@ animation={
 
 function TIC()
  input()
-	draw()
-	t=t+1
+ draw()
+ t=t+1
 end
 
 function input()
  for i,v in pairs(controllable) do
-	 if v then
-			local a = actor[i]
-			if btn(0) then 
-			 a.y=a.y-1 a:set_anim(2)
-			elseif btn(1) then 
-			 a.y=a.y+1 a:set_anim(2)
-			elseif btn(2) then 
-			 a.x=a.x-1 a:set_anim(2) a.flip=1
-			elseif btn(3) then 
-			 a.x=a.x+1 a:set_anim(2) a.flip=0
+  if v then
+   local a = actor[i]
+   if btn(0) then
+    a.y=a.y-1 a:set_anim(2)
+   elseif btn(1) then
+    a.y=a.y+1 a:set_anim(2)
+   elseif btn(2) then
+    a.x=a.x-1 a:set_anim(2) a.flip=1
+   elseif btn(3) then
+    a.x=a.x+1 a:set_anim(2) a.flip=0
    else 
     a:set_anim(1) 
    end
-		end
-	end
+  end
+ end
 end
 
 function draw()
-	cls(13)
-	map(0,0,30,17)
-	print("HELLO LOUIS!",84,84)
-	
-	for i,act in ipairs(actor) do
-		while act.anim ~= nil and act.next <= t do
-			local a = anim[act.anim]
-			local f = a[act.frame]
-			if f.t == F.STOP then 
-				act.anim = nil
-				break
-			elseif f.t == F.INDEX then 
-				act.index = f.v
-			elseif f.t == F.LOOP then
-				act.frame = 0
-			elseif f.t == F.WAIT then
-			 act.next = t + f.v
-			end
-			act.frame = act.frame + 1
-		end
-		local transparent = 0
-		spr(act.index,act.x,act.y,transparent,
-		 act.scale,act.flip,act.rot,
-			act.w,act.h)
+ cls(13)
+ map(0,0,30,17)
+ print("HELLO LOUIS!",84,84)
+
+ for i,act in ipairs(actor) do
+  while act.anim ~= nil and act.next <= t do
+   local a = anim[act.anim]
+   local f = a[act.frame]
+   if f.t == F.STOP then
+    act.anim = nil
+    break
+   elseif f.t == F.INDEX then
+    act.index = f.v
+   elseif f.t == F.LOOP then
+    act.frame = 0
+   elseif f.t == F.WAIT then
+    act.next = t + f.v
+   end
+   act.frame = act.frame + 1
+  end
+  local transparent = 0
+  spr(act.index,act.x,act.y,transparent,
+  act.scale,act.flip,act.rot,
+  act.w,act.h)
  end
 end
 -- <TILES>
