@@ -58,6 +58,8 @@ Actor = {
   tbl.index = tbl.index or 255
   tbl.x = tbl.x or 0
   tbl.y = tbl.y or 0
+  tbl.xoff = tbl.xoff or 0
+  tbl.yoff = tbl.yoff or 0
   tbl.w = tbl.w or 1
   tbl.h = tbl.h or 1
   tbl.scale = tbl.scale or 1
@@ -83,6 +85,7 @@ Control={
 
 Physics={
  new = function(tbl)
+  tbl.box = tbl.box or {top=0, bot=8, left=0, right=8}
   tbl.gravity = tbl.gravity or 1
   tbl.hspeed = tbl.hspeed or 0
   tbl.vspeed = tbl.vspeed or 0
@@ -113,7 +116,7 @@ t=0
 
 function init()
  local player = Comp:add({
-  actor = Actor.new({index=256,x=0,y=0}),
+  actor = Actor.new({index=256,x=84,y=84,xoff=3,yoff=7}),
   anim = Anim.new({
    Anim.still(256),
    Anim.simple(7,{257,258,259,260}),
@@ -124,7 +127,10 @@ function init()
     controller=0,
     anim={still=1,walk=2,jump=3,fall=4},
   }),
-  physics = Physics.new({}),
+  physics = Physics.new({
+    box={top=7,bot=0,left=3,right=3},
+    gravity=0.5,
+  }),
  })
 end
 
@@ -161,15 +167,42 @@ Sys = {
  end,
 
  physics = function(actor,physics,control)
+  -- Gravity
+  local mx = actor.x // 8
+  local mbelow = (actor.y + physics.box.bot + 1) // 8
+  local on_ground = fget(mget(mx, mbelow),0)
+  if not on_ground then
+   physics.vspeed = physics.vspeed + physics.gravity
+  end
+
+  -- if on_ground then trace('on ground') end
+
   if control then
    local hspeed = 0
    if control.left then hspeed = hspeed - 1 end
    if control.right then hspeed = hspeed + 1 end
    physics.hspeed = hspeed
-   -- if control.up then physics.vspeed = -1 end
+   if control.up and on_ground then physics.vspeed = -4 end
   end
+
+  local edgeh = physics.hspeed >= 0 and physics.box.right or -physics.box.left
+  local edgev = physics.vspeed >= 0 and physics.box.bot or -physics.box.top
+  local x,y = actor.x,actor.y
+
   actor.x = actor.x + physics.hspeed
+  x = actor.x + edgeh
+  if fget(mget(x // 8, y // 8),0) then
+   actor.x = actor.x - physics.hspeed
+   x = actor.x + edgeh
+   physics.hspeed = 0
+  end
+
   actor.y = actor.y + physics.vspeed
+  y = actor.y + edgev
+  if fget(mget(x // 8, y // 8),0) then
+   actor.y = actor.y - physics.vspeed
+   physics.vspeed = 0
+  end
  end,
 
  animate = function(actor,anim,control)
@@ -207,9 +240,17 @@ Sys = {
   print("HELLO LOUIS!",84,84)
   for i,act in ipairs(actor) do
    local transparent = 0
-   spr(act.index,act.x,act.y,transparent,
-   act.scale,act.flip,act.rot,
-   act.w,act.h)
+   spr(
+    act.index,
+    act.x-act.xoff,
+    act.y-act.yoff,
+    transparent,
+    act.scale,
+    act.flip,
+    act.rot,
+    act.w,
+    act.h
+   )
   end
  end,
 }
@@ -217,11 +258,11 @@ Sys = {
 -- <TILES>
 -- 018:00000000000000000000000000000000000c0000000000000cc00c0ccccccccc
 -- 020:0cccccccccc0000cc0000c00c0000000c0000000cc0c0000cc000000c0000000
--- 021:ccccccc00000000c0000000c0000000c0000000c0000000c0000000c0000000c
+-- 021:ccccccc00ccc0c0c0000000c00c000cc0000000c0000c00c000000cc0000000c
 -- 033:0000000c000000cc000000cc0000000c0000c00c000000cc000000cc0000000c
 -- 035:c0000000c00c0000cc000000c0000000c00c0000c0000000cc000000cc000000
--- 036:c0000000c0000000c0000000c0000000c0000000c0000000c00000000ccccccc
--- 037:0000000c0000000c0000000c0000000c0000000c0000000c0000000cccccccc0
+-- 036:c0c00000c0000000cc000000cc000000c000c000c0000000cc0c000c0ccccccc
+-- 037:0000000c000000cc000000cc0000c00c0c00000c0000000c0c0c0cccccccccc0
 -- 050:cccccccc0c000c0c0000000000c0000000000000000000000000000000000000
 -- 255:dccccccdcc2cc2cccc2cc2cccc2cc2cccc2cc2cccccccccccc2cc2ccdccccccd
 -- </TILES>
