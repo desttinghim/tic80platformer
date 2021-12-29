@@ -4,42 +4,70 @@
 -- script: lua
 
 local tiny = require "tiny"
+local Anim = require "anim"
 
 local drawingSystem = tiny.processingSystem()
 drawingSystem.filter = tiny.requireAll(
   "transform", "sprite"
 )
+function drawingSystem:preProcess(dt)
+    cls(0)
+end
 function drawingSystem:process(e, dt)
-    cls(15)
     local transparent = 0
     spr(
         e.sprite.i,
         e.transform.x - e.sprite.xoff,
         e.transform.y - e.sprite.yoff,
         transparent,
-        e.transform.scale,
-        e.transform.flip,
-        e.transform.rot,
+        e.sprite.scale,
+        e.sprite.flip,
+        e.sprite.rot,
         e.sprite.w,
         e.sprite.h
     )
 end
 
 local animSystem = tiny.processingSystem()
-animSystem.filter = tiny.requireAll(
-  "transform", "sprite", "anim"
+animSystem.filter = tiny.filter(
+  "(sprite&anim)|(sprite&anim&control)"
 )
 function animSystem:process(e, dt)
+  if e.control then
+    if e.control.left then e.sprite.flip = 1 end
+    if e.control.right then e.sprite.flip = 0 end
+    if e.control.up then e.anim:play("jump")
+    elseif e.control.down then e.anim:play("fall")
+    elseif e.control.left or e.control.right then e.anim:play("walk")
+    else e.anim:play("still") end
+  end
+  local index = e.anim:update(dt)
+  if index then e.sprite.i = index end
 end
 
+local controlSystem = tiny.processingSystem()
+controlSystem.filter = tiny.requireAll("control")
+function controlSystem:process(e, dt)
+  if e.control.controller < 4 then
+    local offset = e.control.controller * 8
+    -- basic controls
+    e.control.up = btn(offset)
+    e.control.down = btn(offset + 1)
+    e.control.left = btn(offset + 2)
+    e.control.right = btn(offset + 3)
+    e.control.a = btn(offset + 4)
+    e.control.b = btn(offset + 5)
+    e.control.x = btn(offset + 6)
+    e.control.y = btn(offset + 7)
+    -- actions
+    e.control.jump = btnp(offset) or btnp(offset + 4)
+  end
+end
 
 local player = {
     transform = {
         x = 80,
         y = 80,
-        scale = 1,
-        flip = 0,
-        rot = 0,
     },
     sprite = {
         i = 256,
@@ -47,18 +75,25 @@ local player = {
         yoff = 4,
         w = 1,
         h = 1,
+        flip = 0,
+        scale = 1,
+        rot = 0,
     },
-    anim = {
-
-    }
+    anim = Anim.new({
+      still = Anim.still(256),
+      walk = Anim.simple(5, {257,258,259,260}),
+      jump = Anim.still(261),
+      fall = Anim.still(262),
+    }, "still"),
+    control = {
+      controller = 0,
+    },
 }
 
-local world = tiny.world(drawingSystem, player)
-local t = 0
+local world = tiny.world(drawingSystem, animSystem, controlSystem, player)
 
 function TIC()
- world:update(t)
- t = t + 1
+ world:update(1)
 end
 
 -- <TILES>
