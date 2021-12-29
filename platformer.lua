@@ -12,6 +12,7 @@ drawingSystem.filter = tiny.requireAll(
 )
 function drawingSystem:preProcess(dt)
     cls(0)
+    map(0,0,30,17,0,0)
 end
 function drawingSystem:process(e, dt)
     local transparent = 0
@@ -64,6 +65,77 @@ function controlSystem:process(e, dt)
   end
 end
 
+function aabb_overlap(a,b)
+  return
+    a.x < b.x + b.w and
+    a.x + a.w > b.x and
+    a.y < b.y + b.h and
+    a.y + a.h > b.y
+end
+
+function aabb_distance_to(a,b)
+  local dx, dy = 0, 0
+  if a.x < b.x then dx = b.x - (a.x + a.w)
+  elseif a.x > b.x then dx = a.x - (b.x + b.w)
+  end
+  if a.y < b.y then dy = b.y - (a.y + a.w)
+  elseif a.y > b.y then dy = a.y - (b.y + b.w)
+  end
+  return dx, dy
+end
+
+-- rect should be absolutely positioned
+function tilemap_collision(rect)
+   local x,y = rect.x, rect.y
+   local left = x // 8
+   local right = (x + rect.w) // 8
+   local top = y // 8
+   local bot = (y + rect.h) // 8
+
+   local any_collision = false
+   for i=left,right do
+     for j=top,bot do
+       local t = mget(i,j)
+       if fget(t,0) then any_collision = true end
+     end
+   end
+   return any_collision
+end
+
+function tilemap_distance_to(a, m)
+end
+
+local physicsSystem = tiny.processingSystem()
+physicsSystem.filter = tiny.filter(
+  "transform&aabb&physics|control"
+)
+function physicsSystem:process(e, dt)
+   if e.control then
+     if e.control.left then e.physics.vel.x = -1
+     elseif e.control.right then e.physics.vel.x = 1
+     else e.physics.vel.x = 0
+     end
+   end
+
+   -- vs map
+   local nextx = e.transform.x + e.physics.vel.x
+   local nexty = e.transform.y + e.physics.vel.y
+
+   local collided = tilemap_collision({
+       x = nextx + e.aabb.x,
+       y = nexty + e.aabb.y,
+       w = e.aabb.w,
+       h = e.aabb.h
+   })
+   if collided then
+     nextx = e.transform.x
+     nexty = e.transform.y
+   end
+
+   e.transform.x = nextx
+   e.transform.y = nexty
+end
+
 local player = {
     transform = {
         x = 80,
@@ -88,9 +160,20 @@ local player = {
     control = {
       controller = 0,
     },
+    aabb = {
+      -- Relative to transform
+      x = -4,
+      y = -4,
+      w = 8,
+      h = 8,
+    },
+    physics = {
+      vel = {x=0,y=0},
+      max = {x=8,y=8},
+    },
 }
 
-local world = tiny.world(drawingSystem, animSystem, controlSystem, player)
+local world = tiny.world(drawingSystem, animSystem, controlSystem, physicsSystem, player)
 
 function TIC()
  world:update(1)
