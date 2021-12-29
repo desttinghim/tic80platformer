@@ -78,6 +78,7 @@ Control={
   tbl.right = false
   tbl.up = false
   tbl.down = false
+  tbl.jump = false
   tbl.anim = tbl.anim or {}
   return tbl
  end
@@ -194,6 +195,7 @@ Sys = {
 
  input = function(control)
   control.up = btn(0)
+  control.jump = btnp(0) or btnp(4)
   control.down = btn(1)
   control.left = btn(2)
   control.right = btn(3)
@@ -202,17 +204,27 @@ Sys = {
  physics = function(actor,physics,control)
   local mx = actor.x // 8
   local mbelow = (actor.y + physics.vbox.bot + 1) // 8
-  local on_ground = fget(mget(mx, mbelow),0)
 
   -- Apply gravity
   physics.vspeed = physics.vspeed + physics.gravity
 
+  local mx, my = actor.x // 8, actor.y // 8
+  local left = (actor.x - physics.hbox.left - 1) // 8
+  local right = (actor.x + physics.hbox.right + 1) // 8
+  local top = (actor.y - physics.vbox.top - 1) // 8
+  local bot = (actor.y + physics.vbox.bot + 1) // 8
+
+  local on_ground = fget(mget(mx, bot),0)
+  local on_top = fget(mget(mx, top),0)
+  local on_left = fget(mget(left, my),0)
+  local on_right = fget(mget(right, my),0)
+
   if control then
    local hspeed = 0
-   if control.left then hspeed = hspeed - 1 end
-   if control.right then hspeed = hspeed + 1 end
+   if control.left and not on_left then hspeed = hspeed - 1 end
+   if control.right and not on_right then hspeed = hspeed + 1 end
    physics.hspeed = hspeed
-   if control.up and on_ground then physics.vspeed = -4 end
+   if control.jump and on_ground and not on_top then physics.vspeed = -4 end
   end
 
   local nextx = actor.x + physics.hspeed
