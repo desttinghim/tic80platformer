@@ -91,6 +91,8 @@ Physics={
   tbl.gravity = tbl.gravity or 1
   tbl.hspeed = tbl.hspeed or 0
   tbl.vspeed = tbl.vspeed or 0
+  tbl.jump = tbl.jump or 1
+  tbl.on_ground = false
   return tbl
  end,
 
@@ -103,6 +105,15 @@ Physics={
    left = point.x - box.left,
    right = point.x + box.right,
   }
+ end,
+
+ draw_aabb = function(aabb, color)
+  rectb(aabb.left,
+        aabb.top,
+        aabb.right - aabb.left,
+        aabb.bot - aabb.top,
+        color
+  )
  end,
 
  h_overlaps = function(a,b)
@@ -149,7 +160,7 @@ t=0
 
 function init()
  local player = Comp:add({
-  actor = Actor.new({index=256,x=84,y=84,xoff=3,yoff=3}),
+  actor = Actor.new({index=256,x=84,y=84,xoff=4,yoff=4}),
   anim = Anim.new({
    Anim.still(256),
    Anim.simple(7,{257,258,259,260}),
@@ -161,9 +172,9 @@ function init()
     anim={still=1,walk=2,jump=3,fall=4},
   }),
   physics = Physics.new({
-    vbox={top=4,bot=4,left=0,right=1},
-    hbox={top=3,bot=3,left=1,right=2},
-    gravity=0.5,
+    vbox={top=3,bot=4,left=2,right=2},
+    hbox={top=2,bot=3,left=3,right=3},
+    gravity=0.3, jump=4
   }),
  })
 end
@@ -186,11 +197,12 @@ Sys = {
     Sys.physics(act, Comp.physics[i], Comp.control[i])
    end
    if Comp.anim[i] then
-    Sys.animate(act, Comp.anim[i], Comp.control[i])
+    Sys.animate(act, Comp.anim[i], Comp.control[i], Comp.physics[i])
    end
   end
 
   Sys.draw(Comp.actor)
+  Sys.draw_debug(Comp.actor, Comp.physics)
  end,
 
  input = function(control)
@@ -202,9 +214,6 @@ Sys = {
  end,
 
  physics = function(actor,physics,control)
-  local mx = actor.x // 8
-  local mbelow = (actor.y + physics.vbox.bot + 1) // 8
-
   -- Apply gravity
   physics.vspeed = physics.vspeed + physics.gravity
 
@@ -219,12 +228,14 @@ Sys = {
   local on_left = fget(mget(left, my),0)
   local on_right = fget(mget(right, my),0)
 
+  physics.on_ground = on_ground
+
   if control then
    local hspeed = 0
    if control.left and not on_left then hspeed = hspeed - 1 end
    if control.right and not on_right then hspeed = hspeed + 1 end
    physics.hspeed = hspeed
-   if control.jump and on_ground and not on_top then physics.vspeed = -4 end
+   if control.jump and on_ground and not on_top then physics.vspeed = -physics.jump end
   end
 
   local nextx = actor.x + physics.hspeed
@@ -248,9 +259,15 @@ Sys = {
 
  end,
 
- animate = function(actor,anim,control)
-  if control then
-   if control.left then
+ animate = function(actor,anim,control,physics)
+  if control and physics then
+   if not physics.on_ground then
+    if physics.vspeed < 0 then
+     if control.anim.jump then anim:play(control.anim.jump) end
+    else
+     if control.anim.fall then anim:play(control.anim.fall) end
+    end
+   elseif control.left then
     actor.flip=1
     if control.anim.walk then anim:play(control.anim.walk) end
    elseif control.right then
@@ -280,7 +297,6 @@ Sys = {
  draw = function(actor)
   cls(13)
   map(0,0,30,17)
-  print("HELLO LOUIS!",84,84)
   for i,act in ipairs(actor) do
    local transparent = 0
    spr(
@@ -294,6 +310,17 @@ Sys = {
     act.w,
     act.h
    )
+  end
+ end,
+
+ draw_debug = function(actor, physics)
+  print("HELLO LOUIS!",84,84)
+  for i,act in ipairs(actor) do
+   if physics then
+    local phy = physics[i]
+    Physics.draw_aabb(Physics.aabb(act, phy.vbox), 4)
+    Physics.draw_aabb(Physics.aabb(act, phy.hbox), 6)
+   end
   end
  end,
 }
