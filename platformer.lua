@@ -202,7 +202,7 @@ Sys = {
   end
 
   Sys.draw(Comp.actor)
-  Sys.draw_debug(Comp.actor, Comp.physics)
+  --Sys.draw_debug(Comp.actor, Comp.physics)
  end,
 
  input = function(control)
@@ -238,24 +238,22 @@ Sys = {
    if control.jump and on_ground and not on_top then physics.vspeed = -physics.jump end
   end
 
-  local nextx = actor.x + physics.hspeed
-  local nexty = actor.y + physics.vspeed
-  local nextp = {x=nextx,y=nexty}
+  local nextp = {x=actor.x + physics.hspeed,y=actor.y + physics.vspeed}
 
   local haabb = Physics.aabb(nextp, physics.hbox)
   if Physics.collides_with_map(haabb) then
-   nextx = actor.x
+   nextp.x = actor.x
    physics.hspeed = 0
   end
 
   local vaabb = Physics.aabb(nextp, physics.vbox)
   if Physics.collides_with_map(vaabb) then
-   nexty = actor.y
+   nextp.y = actor.y
    physics.vspeed = 0
   end
 
-  actor.x = nextx
-  actor.y = nexty
+  actor.x = nextp.x
+  actor.y = nextp.y
 
  end,
 
