@@ -85,12 +85,44 @@ Control={
 
 Physics={
  new = function(tbl)
-  tbl.box = tbl.box or {top=0, bot=8, left=0, right=8}
+  tbl.hbox = tbl.hbox or {top=1, bot=7, left=0, right=8}
+  tbl.vbox = tbl.vbox or {top=0, bot=8, left=1, right=7}
   tbl.gravity = tbl.gravity or 1
   tbl.hspeed = tbl.hspeed or 0
   tbl.vspeed = tbl.vspeed or 0
   return tbl
- end
+ end,
+
+ -- Create box table, the values are relative to the
+ -- actors x/y
+ aabb = function(point, box)
+  return {
+   top = point.y - box.top,
+   bot = point.y + box.bot,
+   left = point.x - box.left,
+   right = point.x + box.right,
+  }
+ end,
+
+ h_overlaps = function(a,b)
+  return (a.left < b.right) and (a.right > b.left)
+ end,
+
+ v_overlaps = function(a,b)
+  return (a.top < b.bottom) and (a.bottom > b.top)
+ end,
+
+ overlaps = function(a,b)
+  return h_overlaps(a,b) and v_overlaps(a,b)
+ end,
+
+ collides_with_map = function(aabb)
+  local tl = fget(mget(aabb.left // 8, aabb.top // 8),0)
+  local bl = fget(mget(aabb.left // 8, aabb.bot // 8),0)
+  local tr = fget(mget(aabb.right // 8, aabb.top // 8),0)
+  local br = fget(mget(aabb.right // 8, aabb.bot // 8),0)
+  return tl or tr or bl or br
+ end,
 }
 
 Comp = {
@@ -116,7 +148,7 @@ t=0
 
 function init()
  local player = Comp:add({
-  actor = Actor.new({index=256,x=84,y=84,xoff=3,yoff=7}),
+  actor = Actor.new({index=256,x=84,y=84,xoff=3,yoff=3}),
   anim = Anim.new({
    Anim.still(256),
    Anim.simple(7,{257,258,259,260}),
@@ -128,7 +160,8 @@ function init()
     anim={still=1,walk=2,jump=3,fall=4},
   }),
   physics = Physics.new({
-    box={top=7,bot=0,left=3,right=3},
+    vbox={top=4,bot=4,left=0,right=1},
+    hbox={top=3,bot=3,left=1,right=2},
     gravity=0.5,
   }),
  })
@@ -169,10 +202,11 @@ Sys = {
  physics = function(actor,physics,control)
   -- Gravity
   local mx = actor.x // 8
-  local mbelow = (actor.y + physics.box.bot + 1) // 8
+  local mbelow = (actor.y + physics.vbox.bot + 1) // 8
   local on_ground = fget(mget(mx, mbelow),0)
   if not on_ground then
    physics.vspeed = physics.vspeed + physics.gravity
+   physics.vspeed = physics.vspeed > 7 and 7 or physics.vspeed
   end
 
   -- if on_ground then trace('on ground') end
@@ -185,24 +219,21 @@ Sys = {
    if control.up and on_ground then physics.vspeed = -4 end
   end
 
-  local edgeh = physics.hspeed >= 0 and physics.box.right or -physics.box.left
-  local edgev = physics.vspeed >= 0 and physics.box.bot or -physics.box.top
-  local x,y = actor.x,actor.y
-
   actor.x = actor.x + physics.hspeed
-  x = actor.x + edgeh
-  if fget(mget(x // 8, y // 8),0) then
+  actor.y = actor.y + physics.vspeed
+
+  local haabb = Physics.aabb(actor, physics.hbox)
+  if Physics.collides_with_map(haabb) then
    actor.x = actor.x - physics.hspeed
-   x = actor.x + edgeh
    physics.hspeed = 0
   end
 
-  actor.y = actor.y + physics.vspeed
-  y = actor.y + edgev
-  if fget(mget(x // 8, y // 8),0) then
+  local vaabb = Physics.aabb(actor, physics.vbox)
+  if Physics.collides_with_map(vaabb) then
    actor.y = actor.y - physics.vspeed
    physics.vspeed = 0
   end
+
  end,
 
  animate = function(actor,anim,control)
