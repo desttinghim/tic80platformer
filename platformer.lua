@@ -52,18 +52,23 @@ Anim = {
  end,
 } -- Anim
 
+Transform = {
+ new = function(tbl)
+  tbl.x = tbl.x or 0
+  tbl.y = tbl.y or 0
+  tbl.scale = tbl.scale or 1
+  tbl.rot = tbl.rot or 0
+  return tbl
+ end
+}
 -- Actor
 Actor = {
  new = function(tbl)
   tbl.index = tbl.index or 255
-  tbl.x = tbl.x or 0
-  tbl.y = tbl.y or 0
   tbl.xoff = tbl.xoff or 0
   tbl.yoff = tbl.yoff or 0
   tbl.w = tbl.w or 1
   tbl.h = tbl.h or 1
-  tbl.scale = tbl.scale or 1
-  tbl.rot = tbl.rot or 0
   return tbl
  end,
 } -- Actor
@@ -84,36 +89,40 @@ Control={
  end
 }
 
+AABB={
+ -- Component
+ comp = function(tbl)
+  tbl.hcol = tbl.hcol or {}
+  tbl.vcol = tbl.vcol or {}
+  tbl.col = tbl.col or {}
+  tbl.trigger = tbl.trigger or {}
+  return tbl
+ end,
+
+ aabb = function(x, y, w, h)
+  return setmetatable(
+   {x=x, y=y, w=w, h=h},
+   {__index = AABB})
+ end,
+
+ draw = function(box, color)
+  rectb(box.x,
+        box.y,
+        box.x + box.w,
+        box.y + box.h,
+        color
+  )
+ end,
+}
+
 Physics={
  new = function(tbl)
-  tbl.hbox = tbl.hbox or {top=1, bot=7, left=0, right=8}
-  tbl.vbox = tbl.vbox or {top=0, bot=8, left=1, right=7}
   tbl.gravity = tbl.gravity or 1
   tbl.hspeed = tbl.hspeed or 0
   tbl.vspeed = tbl.vspeed or 0
   tbl.jump = tbl.jump or 1
   tbl.on_ground = false
   return tbl
- end,
-
- -- Create box table, the values are relative to the
- -- actors x/y
- aabb = function(point, box)
-  return {
-   top = point.y - box.top,
-   bot = point.y + box.bot,
-   left = point.x - box.left,
-   right = point.x + box.right,
-  }
- end,
-
- draw_aabb = function(aabb, color)
-  rectb(aabb.left,
-        aabb.top,
-        aabb.right - aabb.left,
-        aabb.bot - aabb.top,
-        color
-  )
  end,
 
  h_overlaps = function(a,b)
@@ -135,12 +144,34 @@ Physics={
   local br = fget(mget(aabb.right // 8, aabb.bot // 8),0)
   return tl or tr or bl or br
  end,
+
+ aabb_from_map = function(mx, my)
+  if fget(mget(mx, my), 0) then
+   return {left = mx * 8, right = mx * 8 + 7, top = my * 8, bot = my * 8 + 7}
+  else
+   return nil
+  end
+ end,
+
+ aabb_distance_to = function(a, b)
+  local dx, dy = 0, 0
+  if a.left < b.left then dx = b.left - a.right
+  elseif a.left > b.left then dx = a.left - a.right
+  end
+
+  if a.top < b.top then dy = b.top - a.bot
+  elseif a.top > b.top then dy = a.top - b.bot
+  end
+
+  return {x = dx, y = dy}
+ end,
 }
 
-Comp = {
+Entities = {
  count=0,
 
- actor={},
+ transform={},
+ aabb={},
  control={},
  anim={},
  physics={},
@@ -154,6 +185,9 @@ Comp = {
   if ent.physics then self.physics[count] = ent.physics end
   return count
  end,
+
+ set = function(self, ent, comp)
+ end
 }
 
 t=0
@@ -238,23 +272,13 @@ Sys = {
    if control.jump and on_ground and not on_top then physics.vspeed = -physics.jump end
   end
 
-  local nextp = {x=actor.x + physics.hspeed,y=actor.y + physics.vspeed}
-
-  local haabb = Physics.aabb(nextp, physics.hbox)
-  if Physics.collides_with_map(haabb) then
-   nextp.x = actor.x
-   physics.hspeed = 0
+  local nextp = {x = actor.x + physics.hspeed, y = actor.y + physics.vspeed}
+  local map_aabb = Physics.aabb_from_map(nextp.x // 8, nextp.y // 8)
+  local is_col = Physics.overlaps(actor, map_aabb)
+  if is_col then
+    local dist = Physics.aabb_distance_to()
   end
-
-  local vaabb = Physics.aabb(nextp, physics.vbox)
-  if Physics.collides_with_map(vaabb) then
-   nextp.y = actor.y
-   physics.vspeed = 0
-  end
-
-  actor.x = nextp.x
-  actor.y = nextp.y
-
+  actor.x, actor.y = nextp.x, nextp.y
  end,
 
  animate = function(actor,anim,control,physics)
