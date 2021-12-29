@@ -3,349 +3,63 @@
 -- desc:   trying out tic80
 -- script: lua
 
--- Util
-function enum(tbl)
- local len = #tbl
- for i=1,len do
-  local v = tbl[i]
-  tbl[v] = i
- end
- return tbl
+local tiny = require "tiny"
+
+local drawingSystem = tiny.processingSystem()
+drawingSystem.filter = tiny.requireAll(
+  "transform", "sprite"
+)
+function drawingSystem:process(e, dt)
+    cls(15)
+    local transparent = 0
+    spr(
+        e.sprite.i,
+        e.transform.x - e.sprite.xoff,
+        e.transform.y - e.sprite.yoff,
+        transparent,
+        e.transform.scale,
+        e.transform.flip,
+        e.transform.rot,
+        e.sprite.w,
+        e.sprite.h
+    )
 end
 
--- Animation
-F = enum{"INDEX","WAIT","STOP","LOOP"}
-Anim = {
- new = function(anim)
-  local t = setmetatable({},{__index = Anim})
-
-  t.anim = anim
-  t.index = 1
-  t.next = 0
-  t.frame = 1
-  return t
- end,
-
- play = function(self, i)
-  if self.index ~= i then
-   self.index = i
-   self.next = 0
-   self.frame = 1
-  end
- end,
-
- still = function(i)
-  return {
-   {t=F.INDEX,v=i},
-   {t=F.STOP}
-  }
- end,
- 
- simple = function(len, ilist)
-  local a = {}
-  for i,v in ipairs(ilist) do
-   a[#a+1]={t=F.INDEX,v=v}
-   a[#a+1]={t=F.WAIT,v=len}
-  end
-  a[#a+1]={t=F.LOOP}
-  return a
- end,
-} -- Anim
-
-Transform = {
- new = function(tbl)
-  tbl.x = tbl.x or 0
-  tbl.y = tbl.y or 0
-  tbl.scale = tbl.scale or 1
-  tbl.rot = tbl.rot or 0
-  return tbl
- end
-}
--- Actor
-Actor = {
- new = function(tbl)
-  tbl.index = tbl.index or 255
-  tbl.xoff = tbl.xoff or 0
-  tbl.yoff = tbl.yoff or 0
-  tbl.w = tbl.w or 1
-  tbl.h = tbl.h or 1
-  return tbl
- end,
-} -- Actor
-
-Control={
- -- Valid `controller` values:
- --  0,1,2,3 = players 1-4
- --  4+ = AI
- new = function(tbl)
-  tbl.controller = tbl.controller
-  tbl.left = false
-  tbl.right = false
-  tbl.up = false
-  tbl.down = false
-  tbl.jump = false
-  tbl.anim = tbl.anim or {}
-  return tbl
- end
-}
-
-AABB={
- -- Component
- comp = function(tbl)
-  tbl.hcol = tbl.hcol or {}
-  tbl.vcol = tbl.vcol or {}
-  tbl.col = tbl.col or {}
-  tbl.trigger = tbl.trigger or {}
-  return tbl
- end,
-
- aabb = function(x, y, w, h)
-  return setmetatable(
-   {x=x, y=y, w=w, h=h},
-   {__index = AABB})
- end,
-
- draw = function(box, color)
-  rectb(box.x,
-        box.y,
-        box.x + box.w,
-        box.y + box.h,
-        color
-  )
- end,
-}
-
-Physics={
- new = function(tbl)
-  tbl.gravity = tbl.gravity or 1
-  tbl.hspeed = tbl.hspeed or 0
-  tbl.vspeed = tbl.vspeed or 0
-  tbl.jump = tbl.jump or 1
-  tbl.on_ground = false
-  return tbl
- end,
-
- h_overlaps = function(a,b)
-  return (a.left < b.right) and (a.right > b.left)
- end,
-
- v_overlaps = function(a,b)
-  return (a.top < b.bottom) and (a.bottom > b.top)
- end,
-
- overlaps = function(a,b)
-  return h_overlaps(a,b) and v_overlaps(a,b)
- end,
-
- collides_with_map = function(aabb)
-  local tl = fget(mget(aabb.left // 8, aabb.top // 8),0)
-  local bl = fget(mget(aabb.left // 8, aabb.bot // 8),0)
-  local tr = fget(mget(aabb.right // 8, aabb.top // 8),0)
-  local br = fget(mget(aabb.right // 8, aabb.bot // 8),0)
-  return tl or tr or bl or br
- end,
-
- aabb_from_map = function(mx, my)
-  if fget(mget(mx, my), 0) then
-   return {left = mx * 8, right = mx * 8 + 7, top = my * 8, bot = my * 8 + 7}
-  else
-   return nil
-  end
- end,
-
- aabb_distance_to = function(a, b)
-  local dx, dy = 0, 0
-  if a.left < b.left then dx = b.left - a.right
-  elseif a.left > b.left then dx = a.left - a.right
-  end
-
-  if a.top < b.top then dy = b.top - a.bot
-  elseif a.top > b.top then dy = a.top - b.bot
-  end
-
-  return {x = dx, y = dy}
- end,
-}
-
-Entities = {
- count=0,
-
- transform={},
- aabb={},
- control={},
- anim={},
- physics={},
-
- add = function(self, ent)
-  self.count = self.count + 1
-  local count = self.count
-  if ent.actor then self.actor[count] = ent.actor end
-  if ent.control then self.control[count] = ent.control end
-  if ent.anim then self.anim[count] = ent.anim end
-  if ent.physics then self.physics[count] = ent.physics end
-  return count
- end,
-
- set = function(self, ent, comp)
- end
-}
-
-t=0
-
-function init()
- local player = Comp:add({
-  actor = Actor.new({index=256,x=84,y=84,xoff=4,yoff=4}),
-  anim = Anim.new({
-   Anim.still(256),
-   Anim.simple(7,{257,258,259,260}),
-   Anim.still(261),
-   Anim.still(262),
-  }),
-  control = Control.new({
-    controller=0,
-    anim={still=1,walk=2,jump=3,fall=4},
-  }),
-  physics = Physics.new({
-    vbox={top=3,bot=4,left=2,right=2},
-    hbox={top=2,bot=3,left=3,right=3},
-    gravity=0.3, jump=4
-  }),
- })
+local animSystem = tiny.processingSystem()
+animSystem.filter = tiny.requireAll(
+  "transform", "sprite", "anim"
+)
+function animSystem:process(e, dt)
 end
 
-init()
+
+local player = {
+    transform = {
+        x = 80,
+        y = 80,
+        scale = 1,
+        flip = 0,
+        rot = 0,
+    },
+    sprite = {
+        i = 256,
+        xoff = 4,
+        yoff = 4,
+        w = 1,
+        h = 1,
+    },
+    anim = {
+
+    }
+}
+
+local world = tiny.world(drawingSystem, player)
+local t = 0
 
 function TIC()
- Sys.run()
- t=t+1
+ world:update(t)
+ t = t + 1
 end
-
-Sys = {
- run = function()
-  for i,control in pairs(Comp.control) do
-   if control.controller == 0 then Sys.input(control) end
-  end
-
-  for i,act in ipairs(Comp.actor) do
-   if Comp.physics[i] then
-    Sys.physics(act, Comp.physics[i], Comp.control[i])
-   end
-   if Comp.anim[i] then
-    Sys.animate(act, Comp.anim[i], Comp.control[i], Comp.physics[i])
-   end
-  end
-
-  Sys.draw(Comp.actor)
-  --Sys.draw_debug(Comp.actor, Comp.physics)
- end,
-
- input = function(control)
-  control.up = btn(0)
-  control.jump = btnp(0) or btnp(4)
-  control.down = btn(1)
-  control.left = btn(2)
-  control.right = btn(3)
- end,
-
- physics = function(actor,physics,control)
-  -- Apply gravity
-  physics.vspeed = physics.vspeed + physics.gravity
-
-  local mx, my = actor.x // 8, actor.y // 8
-  local left = (actor.x - physics.hbox.left - 1) // 8
-  local right = (actor.x + physics.hbox.right + 1) // 8
-  local top = (actor.y - physics.vbox.top - 1) // 8
-  local bot = (actor.y + physics.vbox.bot + 1) // 8
-
-  local on_ground = fget(mget(mx, bot),0)
-  local on_top = fget(mget(mx, top),0)
-  local on_left = fget(mget(left, my),0)
-  local on_right = fget(mget(right, my),0)
-
-  physics.on_ground = on_ground
-
-  if control then
-   local hspeed = 0
-   if control.left and not on_left then hspeed = hspeed - 1 end
-   if control.right and not on_right then hspeed = hspeed + 1 end
-   physics.hspeed = hspeed
-   if control.jump and on_ground and not on_top then physics.vspeed = -physics.jump end
-  end
-
-  local nextp = {x = actor.x + physics.hspeed, y = actor.y + physics.vspeed}
-  local map_aabb = Physics.aabb_from_map(nextp.x // 8, nextp.y // 8)
-  local is_col = Physics.overlaps(actor, map_aabb)
-  if is_col then
-    local dist = Physics.aabb_distance_to()
-  end
-  actor.x, actor.y = nextp.x, nextp.y
- end,
-
- animate = function(actor,anim,control,physics)
-  if control and physics then
-   if not physics.on_ground then
-    if physics.vspeed < 0 then
-     if control.anim.jump then anim:play(control.anim.jump) end
-    else
-     if control.anim.fall then anim:play(control.anim.fall) end
-    end
-   elseif control.left then
-    actor.flip=1
-    if control.anim.walk then anim:play(control.anim.walk) end
-   elseif control.right then
-    actor.flip=0
-    if control.anim.walk then anim:play(control.anim.walk) end
-   else
-    if control.anim.still then anim:play(control.anim.still) end
-   end
-  end
-  while anim.index ~= nil and anim.next <= t do
-   local a = anim.anim[anim.index]
-   local f = a[anim.frame]
-   if f.t == F.STOP then
-    anim.index = nil
-    break
-   elseif f.t == F.INDEX then
-    actor.index = f.v
-   elseif f.t == F.LOOP then
-    anim.frame = 0
-   elseif f.t == F.WAIT then
-    anim.next = t + f.v
-   end
-   anim.frame = anim.frame + 1
-  end
- end,
-
- draw = function(actor)
-  cls(13)
-  map(0,0,30,17)
-  for i,act in ipairs(actor) do
-   local transparent = 0
-   spr(
-    act.index,
-    act.x-act.xoff,
-    act.y-act.yoff,
-    transparent,
-    act.scale,
-    act.flip,
-    act.rot,
-    act.w,
-    act.h
-   )
-  end
- end,
-
- draw_debug = function(actor, physics)
-  print("HELLO LOUIS!",84,84)
-  for i,act in ipairs(actor) do
-   if physics then
-    local phy = physics[i]
-    Physics.draw_aabb(Physics.aabb(act, phy.vbox), 4)
-    Physics.draw_aabb(Physics.aabb(act, phy.hbox), 6)
-   end
-  end
- end,
-}
 
 -- <TILES>
 -- 018:00000000000000000000000000000000000c0000000000000cc00c0ccccccccc
