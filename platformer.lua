@@ -92,17 +92,32 @@ function tilemap_collision(rect)
    local top = y // 8
    local bot = (y + rect.h) // 8
 
+   local collision = {}
    local any_collision = false
    for i=left,right do
      for j=top,bot do
        local t = mget(i,j)
-       if fget(t,0) then any_collision = true end
+       if fget(t,0) then
+         any_collision = true
+         collision[#collision+1] = {x=i,y=j}
+       end
      end
    end
-   return any_collision
+   if any_collision then return collision end
+   return nil
 end
 
+-- Returns distance to map cell
 function tilemap_distance_to(a, m)
+  local dx, dy = 0, 0
+  local mx, my, mw, mh = m.x * 8, m.y * 8, 7, 7
+  if a.x < mx then dx = mx - (a.x + a.w)
+  elseif a.x > mx then dx = a.x - (mx + mw)
+  end
+  if a.y < my then dy = my - (a.y + a.w)
+  elseif a.y > my then dy = a.y - (my + mw)
+  end
+  return dx, dy
 end
 
 local physicsSystem = tiny.processingSystem()
@@ -110,30 +125,54 @@ physicsSystem.filter = tiny.filter(
   "transform&aabb&physics|control"
 )
 function physicsSystem:process(e, dt)
-   if e.control then
-     if e.control.left then e.physics.vel.x = -1
-     elseif e.control.right then e.physics.vel.x = 1
-     else e.physics.vel.x = 0
-     end
-   end
+    if e.control then
+        if e.control.left then e.physics.vel.x = -1
+        elseif e.control.right then e.physics.vel.x = 1
+        else e.physics.vel.x = 0
+        end
+    end
 
-   -- vs map
-   local nextx = e.transform.x + e.physics.vel.x
-   local nexty = e.transform.y + e.physics.vel.y
+    -- vs map
+    local xvel, yvel = e.physics.vel.x, e.physics.vel.y
+    local deltax = e.physics.vel.x
+    local deltay = e.physics.vel.y
+    local nextx = e.transform.x + e.physics.vel.x
+    local nexty = e.transform.y + e.physics.vel.y
+    local rect = {
+        x = nextx + e.aabb.x,
+        y = nexty + e.aabb.y,
+        w = e.aabb.w,
+        h = e.aabb.h
+    }
 
-   local collided = tilemap_collision({
-       x = nextx + e.aabb.x,
-       y = nexty + e.aabb.y,
-       w = e.aabb.w,
-       h = e.aabb.h
-   })
-   if collided then
-     nextx = e.transform.x
-     nexty = e.transform.y
-   end
+    local collided = tilemap_collision(rect)
+    if collided then
+        local shortest = {}
+        for i,col in ipairs(collided) do
+            local xdist, ydist = tilemap_distance_to(rect, col)
+            local ttx = xvel ~= 0 and math.abs(xdist / xvel) or 0
+            local tty = yvel ~= 0 and math.abs(ydist / yvel) or 0
+            if shortest.both == nil or ttx < shortest.both or tty < shortest.both then
+              shortest.x, shortest.y = ttx, tty
+              shortest.both = math.min(ttx,tty)
+            end
+        end
+        local shortestTime = 0;
+        if xvel ~= 0 and yvel == 0 then
+          shortestTime = shortest.x
+          deltax = shortestTime * xvel
+        elseif xvel == 0 and yvel ~= 0 then
+          shortestTime = shortest.y
+          deltay = shortestTime * yvel
+        else
+          shortestTime = math.min(math.abs(shortest.x), math.abs(shortest.y))
+          deltax = shortestTime * xvel
+          deltay = shortestTime * yvel
+        end
+    end
 
-   e.transform.x = nextx
-   e.transform.y = nexty
+    e.transform.x = e.transform.x + deltax
+    e.transform.y = e.transform.y + deltay
 end
 
 local player = {
