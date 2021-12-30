@@ -60,6 +60,7 @@ function controlSystem:process(e, dt)
     e.control.b = btn(offset + 5)
     e.control.x = btn(offset + 6)
     e.control.y = btn(offset + 7)
+    e.control.jump = btnp(offset)
   end
 end
 
@@ -134,6 +135,7 @@ function physicsSystem:update(dt)
     if not on_ground then
       e.physics.vel.y = math.min(e.physics.max.y, e.physics.vel.y + e.physics.gravity)
     else
+      e.physics.vel.y = 0
       e.physics.jump_time = 0
     end
 
@@ -144,12 +146,16 @@ function physicsSystem:update(dt)
         e.physics.vel.x = math.min(e.physics.max.x, e.physics.vel.x + e.physics.accel)
       else e.physics.vel.x = e.physics.vel.x * e.physics.friction
       end
-      if e.control.up then
+      if e.control.jump then
         if on_ground then e.physics.jump_time = e.physics.jump_time_max end
+      end
+      if e.control.up then
         if e.physics.jump_time > 0 then
           e.physics.vel.y = -e.physics.jump
           e.physics.jump_time = e.physics.jump_time - 1
         end
+      else
+        e.physics.jump_time = 0
       end
     end
     resolveMovement(dt/2,e);
@@ -159,26 +165,17 @@ end
 function resolveMovement(dt,e)
     -- vs map
     local xvel, yvel = e.physics.vel.x * dt, e.physics.vel.y * dt
-    local deltax = e.physics.vel.x * dt
-    local deltay = e.physics.vel.y * dt
-    local rect_now = {
-        x=e.transform.x + e.aabb.x,
-        y=e.transform.y + e.aabb.y,
-        w=e.aabb.w,
-        h=e.aabb.h
-    }
-    local rect = {
-        x = rect_now.x + deltax,
-        y = rect_now.y + deltay,
-        w = rect_now.w,
-        h = rect_now.h
-    }
+    local deltax = xvel
+    local deltay = yvel
+    local x = e.transform.x + e.aabb.x
+    local y = e.transform.y + e.aabb.y
+    local w, h = e.aabb.w, e.aabb.h
 
-    local collided = tilemap_collision(rect)
+    local collided = tilemap_collision({x=x + deltax, y=y + deltay, w=w, h=h})
     if collided then
         local shortest = {}
         for i,col in ipairs(collided) do
-            local xdist, ydist = tilemap_distance_to(rect_now,col)
+            local xdist, ydist = tilemap_distance_to({x=x,y=y,h=h,w=w}, col)
             local ttx = xvel ~= 0 and math.abs(xdist / xvel) or 0
             local tty = yvel ~= 0 and math.abs(ydist / yvel) or 0
             if shortest.both == nil or ttx < shortest.both or tty < shortest.both then
@@ -186,6 +183,8 @@ function resolveMovement(dt,e)
               shortest.both = math.min(ttx,tty)
             end
         end
+        -- Store to use later
+        local oldDeltaX, oldDeltaY = deltax, deltay
         local shortestTime = 0;
         if xvel ~= 0 and yvel == 0 then
           -- x-axis only
@@ -201,9 +200,28 @@ function resolveMovement(dt,e)
           deltax = shortestTime * xvel
           deltay = shortestTime * yvel
         end
-        e.physics.vel.x, e.physics.vel.y = 0, 0
-    end
+        -- e.physics.vel.x, e.physics.vel.y = 0, 0
 
+        e.transform.x = e.transform.x + deltax
+        e.transform.y = e.transform.y + deltay
+
+        if e.physics.slideOnCollide then
+
+            if shortestTime == shortest.x then
+                -- x resolved first, now move along y axis
+                deltax = 0
+                if not tilemap_collision({x=x,y=y+oldDeltaY,h=h,w=w}) then
+                  deltay = oldDeltaY
+                end
+            elseif shortestTime == shortest.y then
+                -- y resolved first, now move along x axis
+                deltay = 0
+                if not tilemap_collision({x=x+oldDeltaX,y=y,h=h,w=w}) then
+                  deltax = oldDeltaX
+                end
+            else trace("this shouldn't happen") end
+        end
+    end
     e.transform.x = e.transform.x + deltax
     e.transform.y = e.transform.y + deltay
 end
@@ -249,6 +267,7 @@ local player = {
       jump = 1,
       jump_time = 0,
       jump_time_max = 10,
+      slideOnCollide = true,
     },
 }
 
