@@ -3,7 +3,7 @@
 -- desc:   trying out tic80
 -- script: lua
 
-local tiny = require "tiny"
+local tiny = require "lib/tiny"
 local Anim = require "anim"
 
 local drawingSystem = tiny.processingSystem()
