@@ -60,8 +60,6 @@ function controlSystem:process(e, dt)
     e.control.b = btn(offset + 5)
     e.control.x = btn(offset + 6)
     e.control.y = btn(offset + 7)
-    -- actions
-    e.control.jump = btnp(offset) or btnp(offset + 4)
   end
 end
 
@@ -110,7 +108,7 @@ end
 -- Returns distance to map cell
 function tilemap_distance_to(a, m)
   local dx, dy = 0, 0
-  local mx, my, mw, mh = m.x * 8, m.y * 8, 7, 7
+  local mx, my, mw, mh = m.x * 8, m.y * 8, 8, 8
   if a.x < mx then dx = mx - (a.x + a.w)
   elseif a.x > mx then dx = a.x - (mx + mw)
   end
@@ -120,11 +118,25 @@ function tilemap_distance_to(a, m)
   return dx, dy
 end
 
-local physicsSystem = tiny.processingSystem()
+local physicsSystem = tiny.system()
 physicsSystem.filter = tiny.filter(
   "transform&aabb&physics|control"
 )
-function physicsSystem:process(e, dt)
+function physicsSystem:update(dt)
+  for index=1,#self.entities do
+    local e = self.entities[index]
+    local on_ground = tilemap_collision({
+      x = e.transform.x + e.aabb.x,
+      y = e.transform.y + e.aabb.y + 1,
+      w = e.aabb.w,
+      h = e.aabb.h,
+    })
+    if not on_ground then
+      e.physics.vel.y = math.min(e.physics.max.y, e.physics.vel.y + e.physics.gravity)
+    else
+      e.physics.jump_time = 0
+    end
+
     if e.control then
       if e.control.left then
         e.physics.vel.x = math.max(-e.physics.max.x, e.physics.vel.x - e.physics.accel)
@@ -132,24 +144,41 @@ function physicsSystem:process(e, dt)
         e.physics.vel.x = math.min(e.physics.max.x, e.physics.vel.x + e.physics.accel)
       else e.physics.vel.x = e.physics.vel.x * e.physics.friction
       end
+      if e.control.up then
+        if on_ground then e.physics.jump_time = e.physics.jump_time_max end
+        if e.physics.jump_time > 0 then
+          e.physics.vel.y = -e.physics.jump
+          e.physics.jump_time = e.physics.jump_time - 1
+        end
+      end
     end
-
+    resolveMovement(dt/2,e);
+    resolveMovement(dt/2,e);
+  end
+end
+function resolveMovement(dt,e)
     -- vs map
-    local xvel, yvel = e.physics.vel.x, e.physics.vel.y
-    local deltax = e.physics.vel.x
-    local deltay = e.physics.vel.y
+    local xvel, yvel = e.physics.vel.x * dt, e.physics.vel.y * dt
+    local deltax = e.physics.vel.x * dt
+    local deltay = e.physics.vel.y * dt
+    local rect_now = {
+        x=e.transform.x + e.aabb.x,
+        y=e.transform.y + e.aabb.y,
+        w=e.aabb.w,
+        h=e.aabb.h
+    }
     local rect = {
-        x = e.transform.x + deltax + e.aabb.x,
-        y = e.transform.y + deltay + e.aabb.y,
-        w = e.aabb.w,
-        h = e.aabb.h
+        x = rect_now.x + deltax,
+        y = rect_now.y + deltay,
+        w = rect_now.w,
+        h = rect_now.h
     }
 
     local collided = tilemap_collision(rect)
     if collided then
         local shortest = {}
         for i,col in ipairs(collided) do
-            local xdist, ydist = tilemap_distance_to(rect, col)
+            local xdist, ydist = tilemap_distance_to(rect_now,col)
             local ttx = xvel ~= 0 and math.abs(xdist / xvel) or 0
             local tty = yvel ~= 0 and math.abs(ydist / yvel) or 0
             if shortest.both == nil or ttx < shortest.both or tty < shortest.both then
@@ -168,7 +197,7 @@ function physicsSystem:process(e, dt)
           deltay = shortestTime * yvel
         else
           -- both
-          shortestTime = shortest.both
+          shortestTime = math.min(math.abs(shortest.x),math.abs(shortest.y))
           deltax = shortestTime * xvel
           deltay = shortestTime * yvel
         end
@@ -205,17 +234,21 @@ local player = {
     },
     aabb = {
       -- Relative to transform
-      x = -4,
-      y = -4,
-      w = 8,
-      h = 8,
+      x = -3,
+      y = -3,
+      w = 5,
+      h = 7,
     },
     physics = {
       vel = {x=0,y=0},
-      max = {x=2,y=2},
-      accel = 0.2,
+      max = {x=1,y=2.5},
+      accel = 0.1,
       gravity = 0.2,
       friction = 0.8,
+      on_ground = false,
+      jump = 1,
+      jump_time = 0,
+      jump_time_max = 10,
     },
 }
 
