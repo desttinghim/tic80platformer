@@ -114,8 +114,8 @@ function tilemap_distance_to(a, m)
   if a.x < mx then dx = mx - (a.x + a.w)
   elseif a.x > mx then dx = a.x - (mx + mw)
   end
-  if a.y < my then dy = my - (a.y + a.w)
-  elseif a.y > my then dy = a.y - (my + mw)
+  if a.y < my then dy = my - (a.y + a.h)
+  elseif a.y > my then dy = a.y - (my + mh)
   end
   return dx, dy
 end
@@ -126,10 +126,12 @@ physicsSystem.filter = tiny.filter(
 )
 function physicsSystem:process(e, dt)
     if e.control then
-        if e.control.left then e.physics.vel.x = -1
-        elseif e.control.right then e.physics.vel.x = 1
-        else e.physics.vel.x = 0
-        end
+      if e.control.left then
+        e.physics.vel.x = math.max(-e.physics.max.x, e.physics.vel.x - e.physics.accel)
+      elseif e.control.right then
+        e.physics.vel.x = math.min(e.physics.max.x, e.physics.vel.x + e.physics.accel)
+      else e.physics.vel.x = e.physics.vel.x * e.physics.friction
+      end
     end
 
     -- vs map
@@ -157,16 +159,20 @@ function physicsSystem:process(e, dt)
         end
         local shortestTime = 0;
         if xvel ~= 0 and yvel == 0 then
-          shortestTime = shortest.x
+          -- x-axis only
+          shortestTime = shortest.both
           deltax = shortestTime * xvel
         elseif xvel == 0 and yvel ~= 0 then
-          shortestTime = shortest.y
+          -- y-axis only
+          shortestTime = shortest.both
           deltay = shortestTime * yvel
         else
-          shortestTime = math.min(math.abs(shortest.x), math.abs(shortest.y))
+          -- both
+          shortestTime = shortest.both
           deltax = shortestTime * xvel
           deltay = shortestTime * yvel
         end
+        e.physics.vel.x, e.physics.vel.y = 0, 0
     end
 
     e.transform.x = e.transform.x + deltax
@@ -206,7 +212,10 @@ local player = {
     },
     physics = {
       vel = {x=0,y=0},
-      max = {x=8,y=8},
+      max = {x=2,y=2},
+      accel = 0.2,
+      gravity = 0.2,
+      friction = 0.8,
     },
 }
 
