@@ -3,6 +3,10 @@
 -- desc:   trying out tic80
 -- script: lua
 
+--<<luacc>>
+-- The above comment tells luacc where to insert the modules. This must be
+-- an exact match, so don't add any whitespace.
+
 local tiny = require "lib/tiny"
 local Anim = require "anim"
 
