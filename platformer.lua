@@ -18,8 +18,8 @@ local level = {
   bank = 0, -- ? I may not need this
 }
 function level:load(world, x, y)
-  self.x = x
-  self.y = y
+  self.x = x * self.w
+  self.y = y * self.h
 
   for i=x, x + self.w do
     for j=y, y + self.h do
@@ -27,17 +27,20 @@ function level:load(world, x, y)
       if tile == 1 then
          world:addEntity({
             transform = {
-              x = i * 8,
+              x = i * 8 + 4,
               y = j * 8,
             },
             aabb = {
-              x = 0,
+              x = -4,
               y = 0,
               w = 8,
               h = 8,
             },
             trigger = {
-              showPopup = "Press UP to pull"
+              showPopup = {
+                msg = "Press UP",
+                x = i * 8 + 4, y = j * 8 - 8,
+              }
             },
         })
       end
@@ -68,11 +71,21 @@ function drawingSystem:process(e, dt)
           e.sprite.h
       )
     elseif e.popup then
-      clip(0,0,0,0)
-      local x,y = e.transform.x, e.transform.y - 8
-      local w = print(e.popup.msg, x, y, 15, false, 1, true)
-      clip()
-      print(e.popup.msg, x - (w//2), y, 15, false, 1, true)
+        local color = 1
+        local h = 6
+        local pad = 2
+        local x,y = e.transform.x, e.transform.y - (h // 2)
+        -- We need to get the width of the text, but we don't
+        -- want the result of the first print to be visible,
+        -- so we use clip
+        clip(0,0,0,0)
+        local w = print(e.popup.msg, 0, 0, 0, false, 1, true)
+        clip()
+        x = x - (w // 2)
+        rect(x-pad, y-pad, w+pad*2, h+pad*2, 0)
+        -- rectb(x-pad, y-pad, w+pad*2, h+pad*2, 1)
+        line(x-pad, y+h+pad, x+w, y+h+pad, 1)
+        print(e.popup.msg, x, y, color, false, 1, true)
     end
 end
 
@@ -143,26 +156,27 @@ function triggerSystem:update(dt)
   local world = self.world
   for index=1,#self.entities do
     local ent = self.entities[index]
+    -- We only want to check for overlaps if the first
+    -- entity is a a trigger, so we skip over any that aren't
     if not ent.trigger then goto continue2 end
-    -- trace("found ent")
 
     local triggered = false
     for index2=1,#self.entities do
+      -- Don't check for an overlap with self
       if index == index2 then goto continue end
-      -- trace('index '..index..' index2 '..index2)
       local other = self.entities[index2]
-      -- trace("found other")
       local collision = aabb_overlap(get_rect(ent), get_rect(other))
       if collision then
         triggered = true
-        trace("overlapping ")
+        --
         if not ent.trigger.triggered then
-          trace("not triggered")
           if ent.trigger.showPopup then
-            trace("creating popup")
             ent.trigger.triggered = world:addEntity({
-                transform = {x=ent.transform.x,y=ent.transform.y},
-                popup = {msg=ent.trigger.showPopup},
+                transform = {
+                  x=ent.trigger.showPopup.x,
+                  y=ent.trigger.showPopup.y,
+                },
+                popup = {msg=ent.trigger.showPopup.msg},
             })
           end
         end
@@ -360,11 +374,6 @@ local player = {
     },
 }
 
-local testPopup = {
-  transform = {x=80,y=80},
-  popup = {msg="Hello, World"},
-}
-
 local world = tiny.world(
   drawingSystem,
   animSystem,
@@ -372,7 +381,6 @@ local world = tiny.world(
   physicsSystem,
   -- debugSystem,
   player,
-  testPopup,
   triggerSystem
 )
 
