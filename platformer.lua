@@ -135,7 +135,8 @@ function physicsSystem:update(dt)
     if not on_ground then
       e.physics.vel.y = math.min(e.physics.max.y, e.physics.vel.y + e.physics.gravity)
     else
-      e.physics.vel.y = 0
+      e.physics.vel.y = e.physics.vel.y * 0.1
+      if math.abs(e.physics.vel.y) < 0.0001 then e.physics.vel.y = 0 end
       e.physics.jump_time = 0
     end
 
@@ -171,56 +172,15 @@ function resolveMovement(dt,e)
     local y = e.transform.y + e.aabb.y
     local w, h = e.aabb.w, e.aabb.h
 
-    local collided = tilemap_collision({x=x + deltax, y=y + deltay, w=w, h=h})
+    local collided = tilemap_collision({x=x+deltax, y=y, w=w, h=h})
     if collided then
-        local shortest = {}
-        for i,col in ipairs(collided) do
-            local xdist, ydist = tilemap_distance_to({x=x,y=y,h=h,w=w}, col)
-            local ttx = xvel ~= 0 and math.abs(xdist / xvel) or 0
-            local tty = yvel ~= 0 and math.abs(ydist / yvel) or 0
-            if shortest.both == nil or ttx < shortest.both or tty < shortest.both then
-              shortest.x, shortest.y = ttx, tty
-              shortest.both = math.min(ttx,tty)
-            end
-        end
-        -- Store to use later
-        local oldDeltaX, oldDeltaY = deltax, deltay
-        local shortestTime = 0;
-        if xvel ~= 0 and yvel == 0 then
-          -- x-axis only
-          shortestTime = shortest.both
-          deltax = shortestTime * xvel
-        elseif xvel == 0 and yvel ~= 0 then
-          -- y-axis only
-          shortestTime = shortest.both
-          deltay = shortestTime * yvel
-        else
-          -- both
-          shortestTime = math.min(math.abs(shortest.x),math.abs(shortest.y))
-          deltax = shortestTime * xvel
-          deltay = shortestTime * yvel
-        end
-        -- e.physics.vel.x, e.physics.vel.y = 0, 0
-
-        e.transform.x = e.transform.x + deltax
-        e.transform.y = e.transform.y + deltay
-
-        if e.physics.slideOnCollide then
-
-            if shortestTime == shortest.x then
-                -- x resolved first, now move along y axis
-                deltax = 0
-                if not tilemap_collision({x=x,y=y+oldDeltaY,h=h,w=w}) then
-                  deltay = oldDeltaY
-                end
-            elseif shortestTime == shortest.y then
-                -- y resolved first, now move along x axis
-                deltay = 0
-                if not tilemap_collision({x=x+oldDeltaX,y=y,h=h,w=w}) then
-                  deltax = oldDeltaX
-                end
-            else trace("this shouldn't happen") end
-        end
+      deltax = 0
+      e.physics.vel.x = e.physics.vel.x * -0.1
+    end
+    collided = tilemap_collision({x=x+deltax,y=y+deltay,w=w,h=h})
+    if collided then
+      deltay = 0
+      e.physics.vel.y = e.physics.vel.y * -0.1
     end
     e.transform.x = e.transform.x + deltax
     e.transform.y = e.transform.y + deltay
