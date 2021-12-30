@@ -31,17 +31,25 @@ end
 
 local animSystem = tiny.processingSystem()
 animSystem.filter = tiny.filter(
-  "(sprite&anim)|(sprite&anim&control)"
+  "sprite&anim|control|physics"
 )
 function animSystem:process(e, dt)
+  local state = nil
+  if e.physics then
+    if e.physics.on_ground == false then
+      if e.physics.boost_time > 0 then state = "jump"
+      else state = "fall" end
+    end
+  end
   if e.control then
     if e.control.left then e.sprite.flip = 1 end
     if e.control.right then e.sprite.flip = 0 end
-    if e.control.up then e.anim:play("jump")
-    elseif e.control.down then e.anim:play("fall")
-    elseif e.control.left or e.control.right then e.anim:play("walk")
-    else e.anim:play("still") end
+    if not state and (e.control.left or e.control.right) then
+      state = "walk"
+    end
   end
+  if not state then state = "still" end
+  e.anim:play(state)
   local index = e.anim:update(dt)
   if index then e.sprite.i = index end
 end
@@ -133,11 +141,13 @@ function physicsSystem:update(dt)
       h = e.aabb.h,
     })
     if not on_ground then
+      e.physics.on_ground = false
       e.physics.vel.y = math.min(e.physics.max.y, e.physics.vel.y + e.physics.gravity)
     else
+      e.physics.on_ground = true
       e.physics.vel.y = e.physics.vel.y * 0.1
       if math.abs(e.physics.vel.y) < 0.0001 then e.physics.vel.y = 0 end
-      e.physics.jump_time = 0
+      e.physics.boost_time = 0
     end
 
     if e.control then
@@ -148,15 +158,18 @@ function physicsSystem:update(dt)
       else e.physics.vel.x = e.physics.vel.x * e.physics.friction
       end
       if e.control.jump then
-        if on_ground then e.physics.jump_time = e.physics.jump_time_max end
+        if on_ground then
+          e.physics.vel.y = -e.physics.jump
+          e.physics.boost_time = e.physics.boost_max
+        end
       end
       if e.control.up then
-        if e.physics.jump_time > 0 then
-          e.physics.vel.y = -e.physics.jump
-          e.physics.jump_time = e.physics.jump_time - 1
+        if e.physics.boost_time > 0 then
+          e.physics.vel.y = e.physics.vel.y - e.physics.boost
+          e.physics.boost_time = e.physics.boost_time - 1
         end
       else
-        e.physics.jump_time = 0
+        e.physics.boost_time = 0
       end
     end
     resolveMovement(dt/2,e);
@@ -204,8 +217,8 @@ local player = {
     anim = Anim.new({
       still = Anim.still(256),
       walk = Anim.simple(5, {257,258,259,260}),
-      jump = Anim.still(261),
-      fall = Anim.still(262),
+      fall = Anim.still(261),
+      jump = Anim.still(262),
     }, "still"),
     control = {
       controller = 0,
@@ -225,8 +238,9 @@ local player = {
       friction = 0.8,
       on_ground = false,
       jump = 1,
-      jump_time = 0,
-      jump_time_max = 10,
+      boost = 0.3,
+      boost_time = 0,
+      boost_max = 8,
       slideOnCollide = true,
     },
 }
