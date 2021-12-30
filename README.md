@@ -26,3 +26,5 @@ Collision resolution was a particularily annoying issue.
 [celeste-medium]: https://maddythorson.medium.com/celeste-and-towerfall-physics-d24bd2ae0fc5
 [2d-tilemap-collision]: https://jonathanwhiting.com/tutorial/collision/
 [undisbeliever-tile-collision]: https://undisbeliever.net/blog/20200110-tile-collisions.html
+[tic80-multiple-files]: https://github.com/nesbox/TIC-80/wiki/Splitting-a-TIC-80-project-into-multiple-files
+[tiny-ecs]: https://github.com/bakpakin/tiny-ecs
