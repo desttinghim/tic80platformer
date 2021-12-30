@@ -136,11 +136,9 @@ function physicsSystem:process(e, dt)
     local xvel, yvel = e.physics.vel.x, e.physics.vel.y
     local deltax = e.physics.vel.x
     local deltay = e.physics.vel.y
-    local nextx = e.transform.x + e.physics.vel.x
-    local nexty = e.transform.y + e.physics.vel.y
     local rect = {
-        x = nextx + e.aabb.x,
-        y = nexty + e.aabb.y,
+        x = e.transform.x + deltax + e.aabb.x,
+        y = e.transform.y + deltay + e.aabb.y,
         w = e.aabb.w,
         h = e.aabb.h
     }
