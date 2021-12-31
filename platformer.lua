@@ -9,6 +9,7 @@
 
 local tiny = require "lib/tiny"
 local Anim = require "anim"
+require "util"
 
 local level = {
   x = 0,
@@ -16,34 +17,71 @@ local level = {
   w = 30,
   h = 17,
   bank = 0, -- ? I may not need this
+  levels = {},
 }
+-- Load level into memory
 function level:load(world, x, y)
   self.x = x * self.w
   self.y = y * self.h
 
-  for i=x, x + self.w do
-    for j=y, y + self.h do
-      local tile = mget(i,j)
-      if tile == 1 then
-         world:addEntity({
-            transform = {
-              x = i * 8 + 4,
-              y = j * 8,
-            },
-            aabb = {
-              x = -4,
-              y = 0,
-              w = 8,
-              h = 8,
-            },
-            trigger = {
-              showPopup = {
-                msg = "Press UP",
-                x = i * 8 + 4, y = j * 8 - 8,
-              }
-            },
-        })
-      end
+  local index = x + (y * 8)
+  data = self.levels[index]
+
+  for i,v in ipairs(data) do
+    trace(i..' '..v.t)
+    if v.t == "trigger" then
+      world:addEntity({
+        transform = {
+          x = v.x, y = v.y,
+        },
+        aabb = {
+          x = 0, y = 0, w = v.w, h = v.h,
+        },
+        trigger = v.trigger
+      })
+    elseif v.t == "lever" then
+      world:addEntity({
+          transform = {
+            x = v.x * 8, y = v.y * 8,
+          },
+          aabb = {
+            x = 0, y = 0, w = 8, h = 8,
+          },
+          effect = v.effect
+      })
+    end
+  end
+end
+function level:assert(map, value, expected, msg)
+  -- ensure value == expected, or trace msg
+  if value ~= expected then
+    trace(map.x..','..map.y..": "..msg)
+  end
+end
+function level:assertExists(map, value, msg)
+  if not value then
+    trace(map.x..','..map.y..": "..msg)
+  end
+end
+function level:assertTile(map, coord, value, msg)
+  local tile = mget(map.x + coord.x, map.y + coord.y)
+  level:assert(map, tile, value, '('..coord.x..','..coord.y..') '..msg)
+end
+function level:define(x,y,data)
+  -- there is 8 columns per row in the global map
+  local index = x + (y * 8)
+  self.levels[index] = data
+  local map = {x = x * self.w, y = y * self.h}
+  for i,v in ipairs(data) do
+    if v.t == "trigger" then
+      level:assertExists(map, v.x, "missing trigger x")
+      level:assertExists(map, v.y, "missing trigger y")
+      level:assertExists(map, v.w, "missing trigger w")
+      level:assertExists(map, v.h, "missing trigger h")
+      level:assertExists(map, v.trigger, "missing trigger component data")
+    elseif v.t == "lever" then
+      level:assertTile(map, v, 1, "should be a lever")
+      level:assertExists(map, v.effect, "missing effect component data")
     end
   end
 end
@@ -99,7 +137,8 @@ function debugSystem:process(e, dt)
   for i=startx,endx do
     for j=starty,endy do
       if (i - startx) % 2 == (j - starty) % 2 then
-      pix(i, j, 15)
+      local debugColor = (self.indices[e]) % 15
+      pix(i, j, debugColor + 1)
       end
     end
   end
@@ -147,28 +186,42 @@ function controlSystem:process(e, dt)
 
     e.control.jump = btn(offset + 4)
     e.control.jumpp = btnp(offset + 4)
+    e.control.activate = btnp(offset)
   end
 end
 
 local triggerSystem = tiny.system()
-triggerSystem.filter = tiny.filter("transform&aabb|trigger")
+triggerSystem.filter = tiny.filter("transform&aabb&mask|trigger|effect")
 function triggerSystem:update(dt)
   local world = self.world
   for index=1,#self.entities do
     local ent = self.entities[index]
     -- We only want to check for overlaps if the first
-    -- entity is a a trigger, so we skip over any that aren't
-    if not ent.trigger then goto continue2 end
+    -- entity is a trigger, so we skip over any that aren't
+    if not ent.trigger and not ent.effect then goto continue2 end
+    local mask = 0
+    if ent.trigger then mask = ent.trigger.mask end
+    if ent.effect then mask = ent.effect.mask end
 
-    local triggered = false
+    local entered = false
+    local activated = false
     for index2=1,#self.entities do
       -- Don't check for an overlap with self
       if index == index2 then goto continue end
       local other = self.entities[index2]
+      if not other.mask or other.mask ~= mask then goto continue end
       local collision = aabb_overlap(get_rect(ent), get_rect(other))
       if collision then
-        triggered = true
-        --
+        entered = true
+        if other.control and other.control.activate then
+          activated = true
+        end
+      end
+      ::continue::
+    end
+
+    if ent.trigger then
+      if entered then
         if not ent.trigger.triggered then
           if ent.trigger.showPopup then
             ent.trigger.triggered = world:addEntity({
@@ -180,13 +233,24 @@ function triggerSystem:update(dt)
             })
           end
         end
+      else
+        world:removeEntity(ent.trigger.triggered)
+        ent.trigger.triggered = nil
       end
-      ::continue::
-    end
-
-    if not triggered and ent.trigger.triggered then
-      world:removeEntity(ent.trigger.triggered)
-      ent.trigger.triggered = nil
+    elseif ent.effect then
+      if activated and not ent.effect.affected then
+        trace('activated!')
+        if ent.effect.changeLevel then
+          ent.effect.affected = true
+          local change = ent.effect.changeLevel
+          for j=0,change.h-1 do
+            for i=0,change.w-1 do
+              local index = i + (j * change.w) + 1
+              mset(change.x + i, change.y + j, change.data[index])
+            end
+          end
+        end
+      end
     end
     ::continue2::
   end
@@ -372,6 +436,7 @@ local player = {
       boost_max = 8,
       slideOnCollide = true,
     },
+    mask = 1,
 }
 
 local world = tiny.world(
@@ -383,6 +448,36 @@ local world = tiny.world(
   player,
   triggerSystem
 )
+
+level:define(0,0,{
+               {
+                 t = "trigger",
+                 x = 8,
+                 y = 64,
+                 w = 32,
+                 h = 32,
+                 trigger = {
+                   mask = 1,
+                   showPopup = {
+                     x = 32,
+                     y = 64,
+                     msg = "Press UP"
+                   }
+                 }
+               },
+               {
+                 t = "lever",
+                 x = 3,
+                 y = 9,
+                 effect =  {
+                   mask = 1,
+                   changeLevel = {
+                     x = 1, y = 15, w = 3, h = 2,
+                     data = {38, 0, 20, 38, 0, 36}
+                   }
+                 }
+               }
+})
 
 level:load(world, 0,0)
 
